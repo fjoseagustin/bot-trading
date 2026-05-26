@@ -2,6 +2,18 @@ from utils.errors import InvalidTimeframeError
 
 # Configuración canónica de cada timeframe
 TIMEFRAME_CONFIG = {
+    "M1": {
+        "finnhub_resolution": "1",
+        "minutes": 1,
+        "label": "1 Minuto",
+        "aggregate": False,
+    },
+    "M5": {
+        "finnhub_resolution": "5",
+        "minutes": 5,
+        "label": "5 Minutos",
+        "aggregate": False,
+    },
     "M15": {
         "finnhub_resolution": "15",
         "minutes": 15,
@@ -38,6 +50,10 @@ TIMEFRAME_LABELS = {k: v["label"] for k, v in TIMEFRAME_CONFIG.items()}
 
 # Aliases para parsear texto libre del usuario
 TIMEFRAME_ALIASES: dict[str, str] = {
+    # M1
+    "M1": "M1", "1M": "M1", "1MIN": "M1", "1MINUTO": "M1",
+    # M5
+    "M5": "M5", "5M": "M5", "5MIN": "M5", "5MINUTOS": "M5", "5": "M5",
     # M15
     "M15": "M15", "15M": "M15", "15MIN": "M15", "15MINUTOS": "M15", "15": "M15",
     # H1

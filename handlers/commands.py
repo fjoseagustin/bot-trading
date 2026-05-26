@@ -25,6 +25,8 @@ _HELP = """
 *Si omites el timeframe, te lo pregunto* 👇
 
 *Timeframes disponibles:*
+• `M1`  — 1 minuto
+• `M5`  — 5 minutos
 • `M15` — 15 minutos
 • `H1`  — 1 hora
 • `H4`  — 4 horas
@@ -56,6 +58,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def timeframes_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "📊 *Timeframes soportados:*\n\n"
+        "• `M1`  — 1 minuto\n"
+        "• `M5`  — 5 minutos\n"
         "• `M15` — 15 minutos\n"
         "• `H1`  — 1 hora\n"
         "• `H4`  — 4 horas\n"

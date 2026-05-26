@@ -42,6 +42,8 @@ OANDA_TO_TD: dict[str, str] = {
 
 # ── Timeframe canónico → intervalo Twelve Data ────────────────
 TF_TO_TD: dict[str, str] = {
+    "M1":  "1min",
+    "M5":  "5min",
     "M15": "15min",
     "H1":  "1h",
     "H4":  "4h",    # nativo en TD — no hay que agregar
@@ -51,6 +53,8 @@ TF_TO_TD: dict[str, str] = {
 
 # ── Antigüedad máxima aceptable (horas) ──────────────────────
 MAX_AGE_HOURS: dict[str, float] = {
+    "M1":  0.5,
+    "M5":  1,
     "M15": 4,
     "H1":  6,
     "H4":  20,

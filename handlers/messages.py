@@ -221,7 +221,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Pedir timeframe con botones inline
         keyboard = InlineKeyboardMarkup([
             [
+                InlineKeyboardButton("M1",     callback_data=f"tf:{symbol}:M1"),
+                InlineKeyboardButton("M5",     callback_data=f"tf:{symbol}:M5"),
                 InlineKeyboardButton("M15",    callback_data=f"tf:{symbol}:M15"),
+            ],
+            [
                 InlineKeyboardButton("H1",     callback_data=f"tf:{symbol}:H1"),
                 InlineKeyboardButton("H4",     callback_data=f"tf:{symbol}:H4"),
             ],

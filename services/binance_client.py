@@ -20,6 +20,8 @@ _BASE_URL = "https://api.binance.com/api/v3/klines"
 
 # Timeframe canónico → intervalo Binance
 _INTERVAL_MAP: dict[str, str] = {
+    "M1":  "1m",
+    "M5":  "5m",
     "M15": "15m",
     "H1":  "1h",
     "H4":  "4h",   # ← nativo en Binance, no hay que agregar
