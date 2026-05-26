@@ -259,14 +259,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     _, symbol, timeframe = parts
 
-    # Reemplaza el mensaje de botones con confirmación
+    # Elimina el mensaje de selección de timeframe
     try:
-        await query.edit_message_text(
-            f"⏳ Iniciando análisis de *{symbol}* en {timeframe}…",
-            parse_mode="Markdown",
-        )
+        await query.delete_message()
     except Exception:
-        pass  # Si el mensaje ya fue editado no es crítico
+        pass  # Si no se puede borrar no es crítico
 
     await run_analysis(update, context, symbol, timeframe)
 
