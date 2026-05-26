@@ -18,6 +18,9 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+_MAX_RETRIES = 3
+_RETRY_DELAY = 8   # segundos entre reintentos para 503
+
 
 class GeminiClient:
     def __init__(self) -> None:
@@ -40,26 +43,50 @@ class GeminiClient:
 
         logger.debug(f"Calling Gemini {self._model_name} for {symbol} {timeframe}")
 
-        try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self._client.models.generate_content(
-                    model=self._model_name,
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=self._system_prompt,
-                        max_output_tokens=4096,   # Gemini 2.5 usa tokens de razonamiento internos
-                        temperature=0.4,
-                        thinking_config=types.ThinkingConfig(
-                            thinking_budget=1024,  # Cap razonamiento: deja ~3072 para el texto
+        last_exc: Exception | None = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self._client.models.generate_content(
+                        model=self._model_name,
+                        contents=user_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=self._system_prompt,
+                            max_output_tokens=4096,   # Gemini 2.5 usa tokens de razonamiento internos
+                            temperature=0.4,
+                            thinking_config=types.ThinkingConfig(
+                                thinking_budget=1024,  # Cap razonamiento: deja ~3072 para el texto
+                            ),
                         ),
                     ),
-                ),
-            )
+                )
+                break   # éxito → salir del loop
 
-        except Exception as exc:
-            logger.exception(f"Error llamando a Gemini: {exc}")
-            raise APIError(f"Error en Gemini API: {exc}") from exc
+            except Exception as exc:
+                last_exc = exc
+                exc_str = str(exc)
+                is_retryable = "503" in exc_str or "UNAVAILABLE" in exc_str or "429" in exc_str
+                if is_retryable and attempt < _MAX_RETRIES:
+                    logger.warning(
+                        f"Gemini intento {attempt}/{_MAX_RETRIES} falló ({exc_str[:80]}), "
+                        f"reintentando en {_RETRY_DELAY}s…"
+                    )
+                    await asyncio.sleep(_RETRY_DELAY)
+                    continue
+                # Error no recuperable o último intento
+                logger.exception(f"Error llamando a Gemini (intento {attempt}): {exc}")
+                if "503" in exc_str or "UNAVAILABLE" in exc_str:
+                    raise APIError(
+                        "Gemini está temporalmente sobrecargado (503). "
+                        "Intentá de nuevo en unos segundos."
+                    ) from exc
+                if "401" in exc_str or "API_KEY" in exc_str or "invalid" in exc_str.lower():
+                    raise APIError(
+                        "API key de Gemini inválida. "
+                        "Verificá la variable Gemini_API_KEY en Railway."
+                    ) from exc
+                raise APIError(f"Error en Gemini API: {exc}") from exc
 
         # Log de uso si está disponible
         usage = getattr(response, "usage_metadata", None)
