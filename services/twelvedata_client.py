@@ -70,6 +70,7 @@ class TwelveDataClient:
         symbol: str,
         timeframe: str,
         count: int = 500,
+        is_crypto: bool = False,
     ) -> dict:
         """
         symbol   : formato OANDA (OANDA:XAU_USD) o directo (XAU/USD)
@@ -166,17 +167,11 @@ class TwelveDataClient:
             .reset_index(drop=True)
         )
 
-        # ── Eliminar velas de fin de semana (oro/forex no opera Sáb/Dom) ──
-        # Primero filtramos por día de semana (determinístico):
-        #   - Sábado completo
-        #   - Domingo antes de las 21:00 UTC (mercado reabre ~21:00)
-        # Twelve Data a veces genera velas con rango $0.27 en weekends,
-        # demasiado grandes para el filtro de rango pero igualmente sintéticas.
-        df = self._drop_weekend_candles(df, timeframe)
-
-        # ── Eliminar cualquier vela sintética residual ────────
-        # Rango < 1% de la mediana → captura stubs que quedaron
-        df = self._drop_synthetic_candles(df)
+        # ── Eliminar velas de fin de semana (solo forex/commodities, NO crypto) ──
+        # Crypto opera 24/7, no tiene gaps de fin de semana.
+        if not is_crypto:
+            df = self._drop_weekend_candles(df, timeframe)
+            df = self._drop_synthetic_candles(df)
 
         if len(df) < 10:
             raise APIError(

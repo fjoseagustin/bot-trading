@@ -26,6 +26,14 @@ from utils.timeframe import TIMEFRAME_CONFIG
 logger = setup_logger(__name__)
 
 
+def _binance_to_td(symbol: str) -> str:
+    """Convierte símbolo Binance → Twelve Data. Ej: BINANCE:BTCUSDT → BTC/USD"""
+    clean = symbol.replace("BINANCE:", "").upper()
+    if clean.endswith("USDT"):
+        return clean[:-4] + "/USD"
+    return clean
+
+
 class FinnhubClient:
     def __init__(self) -> None:
         self._client      = finnhub.Client(api_key=config.FINNHUB_API_KEY)
@@ -93,10 +101,20 @@ class FinnhubClient:
           stock  → Finnhub
           forex  → Finnhub (premium) con error claro si 403
         """
-        # ── Crypto → Binance ──────────────────────────────────
+        # ── Crypto → Binance (fallback TwelveData si Binance falla por región) ──
         if asset_type == "crypto":
             logger.debug(f"Routing crypto {symbol} → Binance")
-            return await self._get_binance().get_candles(symbol, timeframe, count)
+            try:
+                return await self._get_binance().get_candles(symbol, timeframe, count)
+            except Exception as exc:
+                logger.warning(
+                    f"Binance falló para {symbol} ({exc}), "
+                    "usando TwelveData como fallback"
+                )
+                td_sym = _binance_to_td(symbol)
+                return await self._get_twelvedata().get_candles(
+                    td_sym, timeframe, count, is_crypto=True
+                )
 
         # ── Forex / Commodities → Twelve Data ─────────────────
         if asset_type == "forex":
