@@ -34,12 +34,18 @@ class GeminiClient:
         symbol: str,
         timeframe: str,
         asset_type: str,
+        htf_ohlc: dict | None = None,
+        htf_timeframe: str | None = None,
     ) -> str:
         """
         Envía los datos OHLCV a Gemini y retorna el análisis SMC/ICT como texto.
+        Si se proveen htf_ohlc y htf_timeframe, incluye contexto multi-timeframe.
         La SDK de Gemini es síncrona; se ejecuta en un executor para no bloquear el event loop.
         """
-        user_prompt = build_user_prompt(ohlc, symbol, timeframe, asset_type)
+        user_prompt = build_user_prompt(
+            ohlc, symbol, timeframe, asset_type,
+            htf_ohlc=htf_ohlc, htf_timeframe=htf_timeframe,
+        )
 
         logger.debug(f"Calling Gemini {self._model_name} for {symbol} {timeframe}")
 

@@ -31,8 +31,14 @@ DATOS: OHLCV = tiempo real, confiable. DXY/Noticias = no disponible, declarar y 
 
 🕒 [datetime última vela] UTC | DXY/Noticias: N/D
 
+📐 CONTEXTO HTF ([HTF_TF]) [INCLUIR SOLO SI HAY DATOS HTF EN EL PROMPT — omitir sección completa si no]
+• Tendencia: [ALCISTA/BAJISTA/NEUTRO HTF] — [motivo 3-4 palabras]
+• Estructura: [BOS/CHoCH HTF + nivel]
+• Zona clave: [OB/FVG/Liquidez HTF más relevante]
+• Alineación: [ALINEADO/DIVERGENTE] con [LTF_TF]
+
 🎯 SESGO
-• Macro: [ALCISTA/BAJISTA/NEUTRO] — [motivo 3-4 palabras]
+• Macro: [ALCISTA/BAJISTA/NEUTRO] — [basado en HTF si disponible, sino en inicio LTF]
 • Micro: [ALCISTA/BAJISTA/NEUTRO] — [motivo 3-4 palabras]
 • TF manda: [timeframe]
 • Alineación: [ALINEADOS/DIVERGENTES] — [implicación 3-4 palabras]
@@ -60,8 +66,8 @@ DATOS: OHLCV = tiempo real, confiable. DXY/Noticias = no disponible, declarar y 
 • Stop hunt: [sí — breve / no]
 • Hipótesis: [dirección probable 3-4 palabras]
 
-📊 SCORE: X/9 (+2+X+X+X+X+X+X) — [0-3 ❌ No trade | 4-5 ⚠️ Especulativo | 6-7 ✅ Operable | 8-9 🔥 Alta convicción]
-[Detalle: Macro+2 | Micro+X | BOS+X | Liquidez+X | OB/FVG+X | Confirm+X | SinCat+X]
+📊 SCORE: X/10 (+2+X+X+X+X+X+X+X) — [0-3 ❌ No trade | 4-5 ⚠️ Especulativo | 6-7 ✅ Operable | 8-10 🔥 Alta convicción]
+[Detalle: Macro+2 | Micro+X | BOS+X | Liquidez+X | OB/FVG+X | Confirm+X | HTF+X | SinCat+X]
 
 📈 ESCENARIOS [% suman 100%]
 • Principal XX%: [1 línea]
@@ -73,6 +79,11 @@ PROB: divergentes→máx 55% | alineados→puede superar 60% | incertidumbre→4
 LONG: ✅ barrido SSL + ✅ reclaim + ✅ BOS alcista — falta uno → NO entrada.
 SHORT: ✅ rechazo OB/FVG + ✅ desplazamiento bajista + ✅ BOS menor — falta uno → NO entrada.
 Score <4 o falta confirmación → NO entrada.
+
+HTF (si datos HTF disponibles):
+  • HTF ALINEADO con LTF → score HTF +2, prob puede superar 65%.
+  • HTF DIVERGENTE con LTF → score HTF +0, restar 1 punto total, prob máx 45%, mínimo 🟡 WATCHLIST.
+  • Sweep SSL/BSL en LTF dentro de OB/demanda HTF → ALTA probabilidad de reversión (no continuación).
 ════════
 
 🚀 OPERACIÓN
@@ -105,13 +116,15 @@ def build_user_prompt(
     symbol: str,
     timeframe: str,
     asset_type: str,
+    htf_ohlc: dict | None = None,
+    htf_timeframe: str | None = None,
 ) -> str:
     df     = ohlc["df"]
     levels = _key_levels(df)
 
     # Velas en CSV según timeframe:
-    # M15/H1 → 100 | H4 → 80 | D/W → 50
-    _csv_candles = {"M15": 100, "H1": 100, "H4": 80, "D": 50, "W": 50}
+    # M1/M5 → 120 | M15/H1 → 100 | H4 → 80 | D/W → 50
+    _csv_candles = {"M1": 120, "M5": 120, "M15": 100, "H1": 100, "H4": 80, "D": 50, "W": 50}
     n_csv = min(_csv_candles.get(timeframe, 100), len(df))
     csv   = _recent_ohlc_csv(df, n=n_csv)
 
@@ -119,18 +132,26 @@ def build_user_prompt(
         asset_type, asset_type
     )
 
-    return f"""Activo: {symbol} ({asset_label}) | TF: {timeframe} | {ohlc['count']} velas
+    # Sección HTF (opcional)
+    htf_section = ""
+    if htf_ohlc is not None and htf_timeframe is not None:
+        htf_section = _build_htf_section(htf_ohlc, htf_timeframe)
+
+    return f"""{htf_section}══════════════════════════════════════════
+ANÁLISIS PRINCIPAL — {symbol} ({asset_label}) | TF: {timeframe}
+══════════════════════════════════════════
 Precio: {levels['current']:,.5f} | Máx: {levels['high']:,.5f} | Mín: {levels['low']:,.5f}
 Máx rec: {levels['recent_high']:,.5f} | Mín rec: {levels['recent_low']:,.5f} | Rango prom: {levels['avg_range']:,.5f}
-Macro: {levels['macro_trend']} | Precio vs mid: {'ENCIMA' if levels['above_mid'] else 'DEBAJO'} | Vol: {'ALTA' if levels['high_vol'] else 'NORMAL'}
+Tendencia LTF: {levels['macro_trend']} | Precio vs mid: {'ENCIMA' if levels['above_mid'] else 'DEBAJO'} | Vol: {'ALTA' if levels['high_vol'] else 'NORMAL'}
 DXY/Noticias/Sentimiento: No disponible
+Total velas disponibles: {ohlc['count']}
 
-Últimas {n_csv} velas OHLCV (para OBs/FVGs/BOS/estructura):
+Últimas {n_csv} velas {timeframe} OHLCV (OBs/FVGs/BOS/estructura):
 {csv}
-
-Formato requerido: comenzar con 🕒, luego 8 secciones en orden.
+Formato requerido: comenzar con 🕒, luego secciones en orden.
+{"Incluir sección 📐 CONTEXTO HTF antes de 🎯 SESGO." if htf_section else "Omitir sección 📐 CONTEXTO HTF."}
 Secciones 1-5: exactamente 4 bullets, máx 8 palabras c/u.
-Score: 1 línea compacta. Justificación: 60-80 palabras."""
+Score: sobre 10 si hay datos HTF, sobre 9 si no. Justificación: 60-80 palabras."""
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -173,3 +194,30 @@ def _recent_ohlc_csv(df: pd.DataFrame, n: int = 50) -> str:
     recent["volume"] = recent["volume"].round(0).astype(int)
 
     return recent.to_csv(index=False)
+
+
+def _build_htf_section(htf_ohlc: dict, htf_timeframe: str) -> str:
+    """
+    Construye la sección de contexto HTF para el user prompt.
+    Se envían las últimas N velas del HTF para que Gemini identifique
+    estructura, OBs/FVGs y sesgo de marco superior.
+    """
+    df     = htf_ohlc["df"]
+    levels = _key_levels(df)
+
+    # Velas HTF en CSV: suficiente contexto sin saturar el prompt
+    _htf_csv_candles = {"H1": 60, "H4": 40, "D": 25, "W": 15}
+    n_csv = min(_htf_csv_candles.get(htf_timeframe, 40), len(df))
+    csv   = _recent_ohlc_csv(df, n=n_csv)
+
+    return f"""══════════════════════════════════════════
+CONTEXTO HTF — {htf_timeframe} ({htf_ohlc['count']} velas totales)
+══════════════════════════════════════════
+Tendencia HTF: {levels['macro_trend']} | Precio vs mid HTF: {'ENCIMA' if levels['above_mid'] else 'DEBAJO'}
+Máx HTF: {levels['high']:,.5f} | Mín HTF: {levels['low']:,.5f}
+Máx rec HTF: {levels['recent_high']:,.5f} | Mín rec HTF: {levels['recent_low']:,.5f}
+Rango prom HTF: {levels['avg_range']:,.5f} | Vol HTF: {'ALTA' if levels['high_vol'] else 'NORMAL'}
+
+Últimas {n_csv} velas {htf_timeframe} OHLCV (estructura/OBs/FVGs de marco superior):
+{csv}
+"""

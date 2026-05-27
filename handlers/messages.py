@@ -35,6 +35,17 @@ _chart_builder = ChartBuilder()
 # Palabras clave que disparan el análisis
 _TRIGGERS = ("analiza", "analizar", "analyze", "análisis", "analisis", "analisa")
 
+# Multi-timeframe: para cada TF, el HTF de contexto y cuántas velas pedir
+# El fetch HTF es silencioso — si falla, continúa con análisis mono-TF
+_HTF_MAP: dict[str, tuple[str, int]] = {
+    "M1":  ("H1",  200),
+    "M5":  ("H1",  200),
+    "M15": ("H1",  200),
+    "H1":  ("H4",  150),
+    "H4":  ("D",   100),
+    # D y W: no necesitan HTF adicional
+}
+
 
 # ──────────────────────────────────────────────────────────────
 # Parsing de mensajes
@@ -104,7 +115,7 @@ async def run_analysis(
         parse_mode="Markdown",
     )
 
-    # ── 4. Obtener velas ───────────────────────────────────────
+    # ── 4. Obtener velas (TF principal) ───────────────────────
     try:
         ohlc = await _finnhub.get_candles(
             symbol    = resolved["finnhub_symbol"],
@@ -115,6 +126,30 @@ async def run_analysis(
     except (SymbolNotFoundError, APIError) as exc:
         await status.edit_text(f"❌ {exc}")
         return
+
+    # ── 4b. Fetch HTF de contexto (silencioso — no bloquea si falla) ──
+    htf_ohlc: dict | None = None
+    htf_timeframe: str | None = None
+
+    if timeframe in _HTF_MAP:
+        htf_tf, htf_count = _HTF_MAP[timeframe]
+        try:
+            await status.edit_text(
+                f"⏳ Descargando contexto HTF *{resolved['display_name']}* — {htf_tf}…",
+                parse_mode="Markdown",
+            )
+            htf_ohlc = await _finnhub.get_candles(
+                symbol    = resolved["finnhub_symbol"],
+                asset_type= resolved["asset_type"],
+                timeframe = htf_tf,
+                count     = htf_count,
+            )
+            htf_timeframe = htf_tf
+            logger.info(f"HTF {htf_tf} cargado: {htf_ohlc['count']} velas para {resolved['display_name']}")
+        except Exception as exc:
+            logger.warning(f"Fetch HTF {htf_tf} falló para {resolved['display_name']}: {exc} — continuando sin HTF")
+            htf_ohlc = None
+            htf_timeframe = None
 
     # ── 5-6. Gráfico desactivado (ahorra tiempo y recursos) ───────
 
@@ -149,14 +184,17 @@ async def run_analysis(
     await bot.send_message(chat_id=chat_id, text=stats_msg, parse_mode="Markdown")
 
     # ── 7. Análisis con Gemini (opcional — no bloquea si falla) ──
-    await status.edit_text("🧠 Analizando con IA (SMC/ICT)…")
+    mode_label = f"MTF ({timeframe}+{htf_timeframe})" if htf_timeframe else "SMC/ICT"
+    await status.edit_text(f"🧠 Analizando con IA ({mode_label})…")
     analysis: str | None = None
     try:
         analysis = await _claude.analyze(
-            ohlc       = ohlc,
-            symbol     = resolved["display_name"],
-            timeframe  = timeframe,
-            asset_type = resolved["asset_type"],
+            ohlc          = ohlc,
+            symbol        = resolved["display_name"],
+            timeframe     = timeframe,
+            asset_type    = resolved["asset_type"],
+            htf_ohlc      = htf_ohlc,
+            htf_timeframe = htf_timeframe,
         )
     except APIError as exc:
         logger.warning(f"Gemini no disponible: {exc}")
@@ -166,8 +204,9 @@ async def run_analysis(
     await status.delete()
 
     if analysis:
+        htf_tag = f" · HTF {htf_timeframe}" if htf_timeframe else ""
         header = (
-            f"🔍 *Análisis SMC/ICT — {resolved['display_name']} {timeframe}*\n"
+            f"🔍 *Análisis SMC/ICT — {resolved['display_name']} {timeframe}{htf_tag}*\n"
             f"{'─' * 32}\n\n"
         )
         full_text = header + analysis
